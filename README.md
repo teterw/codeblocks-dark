@@ -21,18 +21,27 @@ themes with a live preview in the terminal, and it backs your config up first.
 
 Each card is drawn in the theme's own colours, read live from its `.conf`.
 
-## Read this first
+## Two kinds of dark
 
-**Stock Code::Blocks can only go dark in the editor.** The code area themes
-perfectly. The menus, toolbars, Management and Logs panels stay light grey, and
-no theme file can change that: Code::Blocks 25.03 is built against wxWidgets
-3.2, whose Win32 controls have no dark mode at all. Dark mode arrived in
-wxWidgets 3.3 and will not be in a stable release until 3.4.0, and the
+This is the thing to understand before installing, because picking wrong is why
+people say "it didn't work".
+
+**Stock Code::Blocks can only go dark in the editor.** A theme colours the code
+area and nothing else. Menus, toolbars, the Management pane and the Logs panel
+stay light grey, and no theme file can change that: Code::Blocks 25.03 is built
+against wxWidgets 3.2, whose Win32 controls have no dark mode at all. Dark mode
+arrived in wxWidgets 3.3 and will not be stable until 3.4.0, and the
 Code::Blocks developers [decided in 2024](https://forums.codeblocks.org/index.php?topic=25899.0)
 to wait for it.
 
-If you want dark menus and panels too, see [Full dark UI](#full-dark-ui) below.
-It is a real option with a real catch.
+| Stock | Editor theme only | Everything dark |
+|---|---|---|
+| <img src="docs/shots/1-stock.png" width="260"> | <img src="docs/shots/2-editor-theme.png" width="260"> | <img src="docs/shots/3-full-dark.png" width="260"> |
+| Code::Blocks 25.03 out of the box | What a theme can do on its own | The full dark build |
+
+The middle one is what most guides give you. If you wanted the right-hand one,
+choose **option 1** in the installer, which is the default. See
+[Full dark UI](#full-dark-ui) for the catch that comes with it.
 
 ## Install
 
@@ -46,8 +55,23 @@ irm https://raw.githubusercontent.com/teterw/codeblocks-dark/main/install.ps1 | 
 [Releases](https://github.com/teterw/codeblocks-dark/releases), unzip anywhere,
 and double-click **`install.bat`**.
 
-Either way you get the same picker. Close Code::Blocks first — it rewrites its
+Either way you get the same menu. Close Code::Blocks first — it rewrites its
 config when it exits and would undo the change.
+
+```
+  What should this install?
+    1. Everything dark        (recommended)
+       Full dark window, and themes your existing Code::Blocks too.
+       Downloads ~36 MB.
+    2. Editor colours only
+       Your existing Code::Blocks. Code area goes dark, menus and
+       panels stay light grey - Code::Blocks cannot darken those.
+    3. Full dark window only, leave my Code::Blocks alone
+```
+
+Running it again is safe: it reinstalls over the top, and if the full dark build
+is already unpacked it repairs it in place instead of downloading again. Add
+`-Reinstall` to force a clean re-download.
 
 Non-interactive, if you already know what you want:
 
@@ -91,6 +115,34 @@ Installing a second theme keeps the first, so you can switch later from
 **Settings > Editor > Syntax highlighting > Colour theme** without rerunning
 anything.
 
+## It installed but nothing changed
+
+First: did only the *code area* go dark? That is the theme working correctly —
+see [Two kinds of dark](#two-kinds-of-dark). Rerun and pick option 1.
+
+Otherwise run the diagnostic. It prints every config Code::Blocks might be
+reading, which theme each has active, and a verdict:
+
+```powershell
+.\diagnose.ps1
+```
+```powershell
+irm https://raw.githubusercontent.com/teterw/codeblocks-dark/main/diagnose.ps1 | iex
+```
+
+The three things it catches, all of which look identical from the outside:
+
+- **Code::Blocks was open.** It writes its whole config on exit, so closing it
+  after installing puts the old theme straight back. The installer refuses to
+  run while it is open, but it cannot stop you opening it mid-way.
+- **A portable install.** If there is a `default.conf` next to `codeblocks.exe`,
+  Code::Blocks reads that and ignores `%APPDATA%` entirely.
+- **A different personality.** Launched with `--personality=work`, Code::Blocks
+  reads `work.conf`, not `default.conf`.
+
+The installer warns about the last two before it writes, and reads the file back
+afterwards to confirm the change actually landed.
+
 ## Uninstall
 
 ```powershell
@@ -118,18 +170,28 @@ real Code::Blocks install is never touched by this path; the two sit side by
 side.
 
 ```powershell
-.\install.ps1 -Mode portable    # just the full-dark build
-.\install.ps1 -Mode both        # theme the real install too
+.\install.ps1 -Mode both        # the default: full dark build + theme
+.\install.ps1 -Mode portable    # just the full dark build
+.\install.ps1 -Reinstall        # force a clean re-download
 ```
+
+If Code::Blocks has never been run on the machine there is no config to theme,
+so `-Mode both` quietly falls back to installing just the full dark build
+rather than failing.
 
 ## Verified
 
-`test\Test-Install.ps1` runs 21 checks against `test/real-default.conf`, a
+The three screenshots above are real, taken on Code::Blocks 25.03 on Windows 11:
+a stock config, the same config after `install.ps1`, and the full dark build.
+Nothing was clicked between them — the installer sets the active theme.
+
+`test\Test-Install.ps1` runs 27 checks against `test/real-default.conf`, a
 genuine Code::Blocks-written config with its comment header, CDATA sections and
 tab indentation intact. They cover the splice (install, replace, switch, missing
 `colour_sets`, non-Code::Blocks input), the file format (no BOM, CDATA, comment
 and unrelated sections preserved, no temp file left behind), byte-for-byte
-backup and restore, and the preview renderer.
+backup and restore, the preview renderer, the `irm | iex` entry point, and that
+the recommended menu default stays on everything-dark.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File test\Test-Install.ps1

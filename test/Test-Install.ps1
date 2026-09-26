@@ -290,10 +290,21 @@ Test-Case 'the published one-liner form actually runs' {
     New-Item -ItemType Directory -Path (Join-Path $sand 'CodeBlocks') -Force | Out-Null
     Copy-Item -LiteralPath $fixture -Destination (Join-Path $sand 'CodeBlocks\default.conf') -Force
 
+    # Menu answer 2 is "editor colours only". Answering 1 would pick the
+    # recommended everything-dark path, which downloads the 36 MB build and
+    # writes to the real LOCALAPPDATA. LOCALAPPDATA is redirected as well so a
+    # future menu reshuffle cannot quietly turn this test into an installer.
+    $localSand = Join-Path $work 'iex-localappdata'
+    New-Item -ItemType Directory -Path $localSand -Force | Out-Null
+
     $script = Join-Path $root 'install.ps1'
-    $out = "1`n2`n" | powershell -NoProfile -Command `
-        "`$env:APPDATA='$sand'; Get-Content '$script' -Raw | iex" 2>&1
+    $out = "2`n2`n" | powershell -NoProfile -Command `
+        "`$env:APPDATA='$sand'; `$env:LOCALAPPDATA='$localSand'; Get-Content '$script' -Raw | iex" 2>&1
     $text = ($out | Out-String)
+
+    if (Test-Path (Join-Path $localSand 'CodeBlocksDark')) {
+        throw 'the theme-only path downloaded the portable build'
+    }
 
     if ($text -match 'ValidationMetadataException|cannot be added because variable') {
         throw "param attributes still break under iex:`n$text"
@@ -305,6 +316,38 @@ Test-Case 'the published one-liner form actually runs' {
     if (-not $active -or $active -eq 'default') {
         throw "config was not themed (active = '$active')"
     }
+}
+
+Test-Case 'the recommended menu default is everything-dark' {
+    # If this drifts back to editor-only, people get a light-grey window and
+    # conclude the installer did nothing. The default matters.
+    $text = Get-Content (Join-Path $root 'install.ps1') -Raw
+    if ($text -notmatch "(?m)^\s*'2'\s*\{\s*\`$Mode\s*=\s*'theme'\s*\}") {
+        throw 'menu option 2 is no longer the editor-only path'
+    }
+    if ($text -notmatch "(?m)^\s*default\s*\{\s*\`$Mode\s*=\s*'both'\s*\}") {
+        throw 'pressing Enter at the menu no longer selects both'
+    }
+    if ($text -notmatch '1\.\s*Everything dark\s*\(recommended\)') {
+        throw 'option 1 is no longer labelled the recommended everything-dark choice'
+    }
+}
+
+Test-Case 'both degrades to portable when Code::Blocks was never run' {
+    $r = Resolve-Mode 'both' $false
+    Should-Be $r.Mode 'portable' 'mode with no config'
+    if (-not $r.Note) { throw 'degrading silently; the user should be told' }
+
+    $r2 = Resolve-Mode 'both' $true
+    Should-Be $r2.Mode 'both' 'mode with a config'
+    if ($r2.Note) { throw "should not warn when there is a config: $($r2.Note)" }
+}
+
+Test-Case 'theme-only still refuses when there is no config to write' {
+    $threw = $false
+    try { [void](Resolve-Mode 'theme' $false) } catch { $threw = $true }
+    if (-not $threw) { throw 'theme mode accepted a missing config' }
+    Should-Be (Resolve-Mode 'theme' $true).Mode 'theme' 'mode with a config'
 }
 
 Test-Case 'an unknown -Mode is refused with a useful message' {

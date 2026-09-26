@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist/codeblocks-dark
-          cp install.ps1 install.bat uninstall.ps1 uninstall.bat README.md LICENSE dist/codeblocks-dark/
+          cp install.ps1 install.bat uninstall.ps1 uninstall.bat diagnose.ps1 diagnose.bat README.md LICENSE dist/codeblocks-dark/
           cp -r themes dist/codeblocks-dark/
           cd dist && 7z a -tzip ../codeblocks-dark.zip codeblocks-dark
       - name: Attach it to the release

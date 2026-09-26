@@ -41,7 +41,8 @@ param(
     [string]$Theme,
     [string]$Mode,
     [switch]$List,
-    [switch]$NoPreview
+    [switch]$NoPreview,
+    [switch]$Reinstall
 )
 
 $ErrorActionPreference = 'Stop'
@@ -424,6 +425,112 @@ function Install-Theme([string]$ConfigPath, [string]$ThemePath) {
     return $slug
 }
 
+function Get-ActiveThemeSlug([string]$ConfigPath) {
+    if (-not (Test-Path $ConfigPath)) { return $null }
+    try {
+        $d = New-Object System.Xml.XmlDocument
+        $d.Load($ConfigPath)
+        $n = $d.SelectSingleNode('/CodeBlocksConfig/editor/colour_sets/ACTIVE_COLOUR_SET/str')
+        if ($n) { return $n.InnerText.Trim() }
+    } catch {
+        return $null
+    }
+    return $null
+}
+
+function Get-PortableLauncher {
+    if (-not (Test-Path $PortableDir)) { return $null }
+    return Get-ChildItem -Path $PortableDir -Filter 'CbLauncher.exe' -Recurse -ErrorAction SilentlyContinue |
+           Select-Object -First 1
+}
+
+function Get-ExistingInstall {
+    $launcher = Get-PortableLauncher
+    $active = Get-ActiveThemeSlug $CbConfig
+    # 'default' is the stock set, so it does not count as us having been here.
+    $ours = $null
+    if ($active -and $active -ne 'default') { $ours = $active }
+    return [pscustomobject]@{
+        Portable  = [bool]$launcher
+        Launcher  = $launcher
+        ThemeSlug = $ours
+        Anything  = ([bool]$launcher -or [bool]$ours)
+    }
+}
+
+function Resolve-Mode([string]$Mode, [bool]$HasCb) {
+    # 'both' should not die just because Code::Blocks has never been run: the
+    # full dark build is self-contained and still gives them what they asked
+    # for. 'theme' genuinely has nothing to write to.
+    if ($Mode -eq 'both' -and -not $HasCb) {
+        return [pscustomobject]@{
+            Mode = 'portable'
+            Note = 'No Code::Blocks config to theme, so installing the full dark build only.'
+        }
+    }
+    if ($Mode -eq 'theme' -and -not $HasCb) {
+        throw "Cannot theme Code::Blocks: $CbConfig does not exist. Start Code::Blocks once first, or use -Mode portable."
+    }
+    return [pscustomobject]@{ Mode = $Mode; Note = $null }
+}
+
+function Get-CodeBlocksInstallDir {
+    foreach ($key in @(
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Code::Blocks',
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Code::Blocks')) {
+        try {
+            $v = (Get-ItemProperty -Path $key -ErrorAction Stop).InstallLocation
+            if ($v -and (Test-Path $v)) { return $v }
+        } catch { }
+    }
+    foreach ($p in @("$env:ProgramFiles\CodeBlocks", "${env:ProgramFiles(x86)}\CodeBlocks")) {
+        if (Test-Path (Join-Path $p 'codeblocks.exe')) { return $p }
+    }
+    return $null
+}
+
+function Write-CompetingConfigWarnings {
+    # The usual reason a theme installs fine and then "does nothing": the copy
+    # of Code::Blocks being launched is reading a different config file.
+    $found = @()
+
+    # Personalities. Launched with --personality=work, Code::Blocks reads
+    # work.conf and never looks at default.conf.
+    $dir = Split-Path $CbConfig -Parent
+    if (Test-Path $dir) {
+        $others = @(Get-ChildItem -Path $dir -Filter '*.conf' -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -ne 'default.conf' -and $_.Name -notlike '*.bak-*' -and $_.Name -notlike 'default.*.conf' })
+        foreach ($o in $others) { $found += "another personality: $($o.Name)" }
+    }
+
+    # A portable install keeps its config beside the exe and ignores %APPDATA%.
+    $appDir = Get-CodeBlocksInstallDir
+    if ($appDir) {
+        foreach ($rel in @('AppData\codeblocks\default.conf', 'default.conf')) {
+            $p = Join-Path $appDir $rel
+            if (Test-Path $p) { $found += "portable config that overrides %APPDATA%: $p" }
+        }
+    }
+
+    if ($found.Count -gt 0) {
+        Write-Host ''
+        Write-Note 'Code::Blocks may be reading a different config than the one being themed:'
+        foreach ($f in $found) { Write-Note "  $f" }
+        Write-Note 'If the theme does not appear, run diagnose.ps1 - it says which file is live.'
+        Write-Host ''
+    }
+}
+
+function Assert-ThemeLanded([string]$ConfigPath, [string]$Slug) {
+    # Read the file back rather than trusting the write. If Code::Blocks was
+    # open and saved over us, or the file went somewhere unexpected, this is
+    # where it shows up instead of the user finding out by looking.
+    $active = Get-ActiveThemeSlug $ConfigPath
+    if ($active -ne $Slug) {
+        throw "Wrote '$Slug' but the config now reads '$active'. Something else changed the file - is Code::Blocks open?"
+    }
+}
+
 function Backup-Config([string]$ConfigPath) {
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
     $bak = "$ConfigPath.bak-$stamp"
@@ -447,30 +554,40 @@ function Assert-CodeBlocksClosed {
 
 #region portable build -------------------------------------------------------
 
-function Install-Portable([string]$ThemeConf) {
-    Write-Step 'Downloading the full-dark portable build (~36 MB)...'
-    $zip = Join-Path ([System.IO.Path]::GetTempPath()) 'cb-darkmode.zip'
-    $old = $ProgressPreference
-    $ProgressPreference = 'SilentlyContinue'
-    try {
-        Invoke-WebRequest -Uri $PortableUrl -OutFile $zip -UseBasicParsing
-    } finally {
-        $ProgressPreference = $old
-    }
+function Install-Portable([string]$ThemeConf, [switch]$Force) {
+    # Already unpacked and not explicitly reinstalling: re-theme it in place
+    # rather than pulling 36 MB down again. That makes a repair run quick.
+    $launcher = Get-PortableLauncher
+    $repaired = $false
+    if ($launcher -and -not $Force) {
+        Write-Step 'Full dark build is already here; repairing it in place.'
+        $repaired = $true
+    } else {
+        Write-Step 'Downloading the full-dark portable build (~36 MB)...'
+        $zip = Join-Path ([System.IO.Path]::GetTempPath()) 'cb-darkmode.zip'
+        $old = $ProgressPreference
+        $ProgressPreference = 'SilentlyContinue'
+        try {
+            Invoke-WebRequest -Uri $PortableUrl -OutFile $zip -UseBasicParsing
+        } finally {
+            $ProgressPreference = $old
+        }
 
-    $hash = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower()
-    if ($hash -ne $PortableSha256.ToLower()) {
+        $hash = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower()
+        if ($hash -ne $PortableSha256.ToLower()) {
+            Remove-Item $zip -Force -ErrorAction SilentlyContinue
+            throw "Checksum mismatch. Expected $PortableSha256 but got $hash. Download rejected."
+        }
+        Write-Good 'Checksum verified.'
+
+        if (Test-Path $PortableDir) { Remove-Item $PortableDir -Recurse -Force }
+        New-Item -ItemType Directory -Path $PortableDir -Force | Out-Null
+        Expand-Archive -Path $zip -DestinationPath $PortableDir -Force
         Remove-Item $zip -Force -ErrorAction SilentlyContinue
-        throw "Checksum mismatch. Expected $PortableSha256 but got $hash. Download rejected."
+
+        $launcher = Get-PortableLauncher
     }
-    Write-Good 'Checksum verified.'
 
-    if (Test-Path $PortableDir) { Remove-Item $PortableDir -Recurse -Force }
-    New-Item -ItemType Directory -Path $PortableDir -Force | Out-Null
-    Expand-Archive -Path $zip -DestinationPath $PortableDir -Force
-    Remove-Item $zip -Force -ErrorAction SilentlyContinue
-
-    $launcher = Get-ChildItem -Path $PortableDir -Filter 'CbLauncher.exe' -Recurse | Select-Object -First 1
     if (-not $launcher) { throw 'CbLauncher.exe not found inside the archive.' }
     $appRoot = $launcher.Directory.FullName
 
@@ -490,7 +607,12 @@ function Install-Portable([string]$ThemeConf) {
     $shortcut.Description = 'Code::Blocks with a full dark UI (experimental build)'
     $shortcut.Save()
 
-    return [pscustomobject]@{ Root = $appRoot; Launcher = $launcher.FullName; Shortcut = $lnk }
+    return [pscustomobject]@{
+        Root     = $appRoot
+        Launcher = $launcher.FullName
+        Shortcut = $lnk
+        Repaired = $repaired
+    }
 }
 
 #endregion
@@ -522,24 +644,40 @@ if ($Mode -and $ValidModes -notcontains $Mode) {
     throw "Unknown -Mode '$Mode'. Use one of: $($ValidModes -join ', ')."
 }
 
+$existing = Get-ExistingInstall
+if ($existing.Anything) {
+    Write-Host ''
+    Write-Host '  Already installed:' -ForegroundColor White
+    if ($existing.Portable) { Write-Host "    - full dark build at $PortableDir" }
+    if ($existing.ThemeSlug) { Write-Host "    - editor theme '$($existing.ThemeSlug)' is active" }
+    Write-Host '    Running again reinstalls it; nothing is left half-applied.' -ForegroundColor DarkGray
+}
+
 if (-not $Mode) {
     Write-Host ''
     Write-Host '  What should this install?' -ForegroundColor White
-    Write-Host '    1. Dark theme for my Code::Blocks     (recommended)'
-    Write-Host '    2. Full-dark portable Code::Blocks    (~36 MB, 2023 build)'
-    Write-Host '    3. Both'
+    # Everything-dark leads because the editor-only option is what disappoints
+    # people: it darkens the code area and leaves menus and panels light grey,
+    # which reads as "it did not work".
+    Write-Host '    1. Everything dark        (recommended)' -ForegroundColor White
+    Write-Host '       Full dark window, and themes your existing Code::Blocks too.'
+    Write-Host '       Downloads ~36 MB.'
+    Write-Host '    2. Editor colours only'
+    Write-Host '       Your existing Code::Blocks. Code area goes dark, menus and'
+    Write-Host '       panels stay light grey - Code::Blocks cannot darken those.'
+    Write-Host '    3. Full dark window only, leave my Code::Blocks alone'
     Write-Host ''
     $choice = Read-Host '  Choice [1]'
     switch ($choice) {
-        '2'     { $Mode = 'portable' }
-        '3'     { $Mode = 'both' }
-        default { $Mode = 'theme' }
+        '2'     { $Mode = 'theme' }
+        '3'     { $Mode = 'portable' }
+        default { $Mode = 'both' }
     }
 }
 
-if (($Mode -eq 'theme' -or $Mode -eq 'both') -and -not $hasCb) {
-    throw "Cannot theme Code::Blocks: $CbConfig does not exist. Start Code::Blocks once first."
-}
+$resolved = Resolve-Mode $Mode $hasCb
+if ($resolved.Note) { Write-Note $resolved.Note }
+$Mode = $resolved.Mode
 
 $chosen = $null
 if ($Theme) {
@@ -563,16 +701,22 @@ $bak = $null
 
 if ($Mode -eq 'theme' -or $Mode -eq 'both') {
     Assert-CodeBlocksClosed
+    Write-CompetingConfigWarnings
     $bak = Backup-Config $CbConfig
     Write-Good "Backed up your config to $(Split-Path $bak -Leaf)"
     $slug = Install-Theme $CbConfig $themeConf
+    Assert-ThemeLanded $CbConfig $slug
     Write-Good "Installed '$slug' into $CbConfig"
-    $done += 'Start Code::Blocks - the theme is already active.'
+    $done += 'Start Code::Blocks - the theme is already active in the code area.'
 }
 
 if ($Mode -eq 'portable' -or $Mode -eq 'both') {
-    $portable = Install-Portable $themeConf
-    Write-Good "Portable build unpacked to $($portable.Root)"
+    $portable = Install-Portable $themeConf -Force:$Reinstall
+    if ($portable.Repaired) {
+        Write-Good "Full dark build repaired at $($portable.Root)"
+    } else {
+        Write-Good "Full dark build unpacked to $($portable.Root)"
+    }
     Write-Good "Desktop shortcut created: $(Split-Path $portable.Shortcut -Leaf)"
     $done += 'Open the "CodeBlocks Dark" desktop shortcut for the full dark UI.'
 }

@@ -1,0 +1,13 @@
+# Batch files must be CRLF; LF can break label/goto parsing on Windows.
+*.bat   text eol=crlf
+*.ps1   text eol=crlf
+
+# Config fixtures and theme files are compared byte-for-byte by the tests,
+# so git must not rewrite their line endings.
+*.conf  -text
+
+*.md    text eol=lf
+*.yml   text eol=lf
+*.py    text eol=lf
+*.json  text eol=lf
+*.svg   text eol=lf

@@ -57,6 +57,13 @@ Non-interactive, if you already know what you want:
 .\install.ps1 -NoPreview            # plain numbered menu
 ```
 
+`iex` cannot pass arguments, so to use those switches with the one-liner, wrap
+it in a script block:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/teterw/codeblocks-dark/main/install.ps1))) -Theme dracula
+```
+
 ## Themes
 
 | | |

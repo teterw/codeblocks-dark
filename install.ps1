@@ -550,6 +550,7 @@ if (-not $chosen) {
 
 $themeConf = Join-Path $store.Path "$($chosen.slug).conf"
 $done = @()
+$bak = $null
 
 if ($Mode -eq 'theme' -or $Mode -eq 'both') {
     Assert-CodeBlocksClosed
@@ -575,7 +576,21 @@ Write-Host ''
 Write-Host '  Done.' -ForegroundColor Green
 foreach ($line in $done) { Write-Host "    - $line" }
 Write-Host ''
-Write-Host '  To undo, run uninstall.ps1' -ForegroundColor DarkGray
+
+# Run from the zip there is an uninstall.ps1 sitting right here. Run through
+# `irm | iex` there is not, so point at the backup instead of a file that
+# does not exist on this machine.
+if ($bak) { Write-Host "  Backup: $bak" -ForegroundColor DarkGray }
+$localUninstall = $null
+if ($PSScriptRoot) { $localUninstall = Join-Path $PSScriptRoot 'uninstall.ps1' }
+if ($localUninstall -and (Test-Path $localUninstall)) {
+    Write-Host '  To undo, run uninstall.ps1' -ForegroundColor DarkGray
+} elseif ($bak) {
+    Write-Host '  To undo, restore that backup over default.conf:' -ForegroundColor DarkGray
+    Write-Host "    Copy-Item '$bak' '$CbConfig' -Force" -ForegroundColor DarkGray
+} else {
+    Write-Host '  To undo, delete the folder and shortcut listed above.' -ForegroundColor DarkGray
+}
 Write-Host ''
 
 }

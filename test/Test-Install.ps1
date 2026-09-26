@@ -10,6 +10,7 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path $PSScriptRoot -Parent
 . (Join-Path $root 'install.ps1')
+. (Join-Path $root 'diagnose.ps1')
 
 $fixture = Join-Path $PSScriptRoot 'real-default.conf'
 $themes  = Join-Path $root 'themes'
@@ -361,6 +362,37 @@ Test-Case 'an unknown -Mode is refused with a useful message' {
     if ($threw -notmatch 'theme.*portable.*both') {
         throw "message does not list the valid modes: $threw"
     }
+}
+
+Test-Case 'plugin .conf files are not mistaken for Code::Blocks configs' {
+    # default.cbKeyBinder20.conf sits right next to default.conf and is not XML
+    # at all. Reported as a personality it sends people hunting a non-problem.
+    $dir = Join-Path $work 'personalities'
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    Copy-Item -LiteralPath $fixture -Destination (Join-Path $dir 'default.conf') -Force
+    Copy-Item -LiteralPath $fixture -Destination (Join-Path $dir 'work.conf') -Force
+    Set-Content -LiteralPath (Join-Path $dir 'default.cbKeyBinder20.conf') -Encoding Ascii `
+        -Value 'this is not xml at all'
+    Set-Content -LiteralPath (Join-Path $dir 'default.conf.bak-20260101-000000') -Encoding Ascii `
+        -Value '<CodeBlocksConfig version="1"></CodeBlocksConfig>'
+
+    if (-not (Test-IsCbConfig (Join-Path $dir 'default.conf'))) { throw 'real config rejected' }
+    if (Test-IsCbConfig (Join-Path $dir 'default.cbKeyBinder20.conf')) { throw 'plugin data accepted as a config' }
+
+    $found = @(Get-Personalities $dir | ForEach-Object { $_.Name })
+    Should-Be ($found -join ',') 'work.conf' 'detected personalities'
+}
+
+Test-Case 'the installer does not warn about plugin .conf files either' {
+    $dir = Join-Path $work 'warn-check'
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    Copy-Item -LiteralPath $fixture -Destination (Join-Path $dir 'default.conf') -Force
+    Set-Content -LiteralPath (Join-Path $dir 'default.cbKeyBinder20.conf') -Encoding Ascii `
+        -Value 'not xml'
+
+    $script:CbConfig = Join-Path $dir 'default.conf'
+    $out = (Write-CompetingConfigWarnings *>&1 | Out-String)
+    if ($out -match 'cbKeyBinder') { throw "warned about plugin data:`n$out" }
 }
 
 Test-Case 'backup is a byte-for-byte copy' {

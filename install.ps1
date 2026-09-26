@@ -425,6 +425,18 @@ function Install-Theme([string]$ConfigPath, [string]$ThemePath) {
     return $slug
 }
 
+function Test-IsCbConfig([string]$Path) {
+    # The config folder holds plugin data that also ends in .conf, such as
+    # default.cbKeyBinder20.conf. Go by the root element, not the filename.
+    try {
+        $d = New-Object System.Xml.XmlDocument
+        $d.Load($Path)
+        return ($d.DocumentElement -and $d.DocumentElement.get_Name() -eq 'CodeBlocksConfig')
+    } catch {
+        return $false
+    }
+}
+
 function Get-ActiveThemeSlug([string]$ConfigPath) {
     if (-not (Test-Path $ConfigPath)) { return $null }
     try {
@@ -498,9 +510,13 @@ function Write-CompetingConfigWarnings {
     # work.conf and never looks at default.conf.
     $dir = Split-Path $CbConfig -Parent
     if (Test-Path $dir) {
-        $others = @(Get-ChildItem -Path $dir -Filter '*.conf' -ErrorAction SilentlyContinue |
-                    Where-Object { $_.Name -ne 'default.conf' -and $_.Name -notlike '*.bak-*' -and $_.Name -notlike 'default.*.conf' })
-        foreach ($o in $others) { $found += "another personality: $($o.Name)" }
+        foreach ($o in (Get-ChildItem -Path $dir -Filter '*.conf' -ErrorAction SilentlyContinue)) {
+            if ($o.Name -eq 'default.conf' -or $o.Name -like '*.bak-*') { continue }
+            # Plugin data such as default.cbKeyBinder20.conf also ends in .conf;
+            # only a <CodeBlocksConfig> document is a real personality.
+            if (-not (Test-IsCbConfig $o.FullName)) { continue }
+            $found += "another personality: $($o.Name)"
+        }
     }
 
     # A portable install keeps its config beside the exe and ignores %APPDATA%.

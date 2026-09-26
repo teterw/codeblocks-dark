@@ -260,6 +260,66 @@ Test-Case 'picker frame marks exactly one selected row' {
     }
 }
 
+Test-Case 'no parameter carries an attribute that breaks under iex' {
+    # `irm ... | iex` runs the text in the caller's scope, so param() declares
+    # variables and applies their attributes immediately instead of binding
+    # parameters. A [ValidateSet] then rejects its own empty default and the
+    # whole script dies before line one. Type constraints are fine.
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+        (Join-Path $root 'install.ps1'), [ref]$null, [ref]$null)
+    $block = $ast.ParamBlock
+    if (-not $block) { throw 'install.ps1 has no param block' }
+
+    foreach ($a in $block.Attributes) {
+        throw "script-level attribute [$($a.TypeName)] breaks iex; remove it"
+    }
+    foreach ($p in $block.Parameters) {
+        foreach ($a in $p.Attributes) {
+            if ($a -is [System.Management.Automation.Language.TypeConstraintAst]) { continue }
+            throw "parameter $($p.Name) has [$($a.TypeName)], which breaks iex"
+        }
+    }
+}
+
+Test-Case 'the published one-liner form actually runs' {
+    # The regression this guards was invisible to every other test, because
+    # they all bind parameters properly. This drives the bare iex path a
+    # friend pastes into PowerShell: prompts answered on stdin, and a
+    # sandboxed APPDATA so the real config is never touched.
+    $sand = Join-Path $work 'iex-sandbox'
+    New-Item -ItemType Directory -Path (Join-Path $sand 'CodeBlocks') -Force | Out-Null
+    Copy-Item -LiteralPath $fixture -Destination (Join-Path $sand 'CodeBlocks\default.conf') -Force
+
+    $script = Join-Path $root 'install.ps1'
+    $out = "1`n2`n" | powershell -NoProfile -Command `
+        "`$env:APPDATA='$sand'; Get-Content '$script' -Raw | iex" 2>&1
+    $text = ($out | Out-String)
+
+    if ($text -match 'ValidationMetadataException|cannot be added because variable') {
+        throw "param attributes still break under iex:`n$text"
+    }
+    if ($text -notmatch '\[ok\] Installed') {
+        throw "one-liner did not install anything:`n$text"
+    }
+    $active = Get-Active (Join-Path $sand 'CodeBlocks\default.conf')
+    if (-not $active -or $active -eq 'default') {
+        throw "config was not themed (active = '$active')"
+    }
+}
+
+Test-Case 'an unknown -Mode is refused with a useful message' {
+    $threw = $null
+    try {
+        & $(Join-Path $root 'install.ps1') -Mode nonsense -Theme vim *> $null
+    } catch {
+        $threw = $_.Exception.Message
+    }
+    if (-not $threw) { throw 'accepted an invalid -Mode' }
+    if ($threw -notmatch 'theme.*portable.*both') {
+        throw "message does not list the valid modes: $threw"
+    }
+}
+
 Test-Case 'backup is a byte-for-byte copy' {
     $c = New-Work 'backup'
     $before = [System.IO.File]::ReadAllBytes($c)

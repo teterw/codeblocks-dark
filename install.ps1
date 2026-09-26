@@ -32,16 +32,21 @@
 .EXAMPLE
     .\install.ps1 -Theme dracula -Mode both
 #>
-[CmdletBinding()]
+# No [CmdletBinding()] and no validation attributes on these parameters.
+# `irm ... | iex` executes this text in the caller's scope, where param() is not
+# parameter binding at all -- it declares variables and attaches the attributes
+# right away. A [ValidateSet] on $Mode would then validate its empty default and
+# throw before the script ran. -Mode is checked by hand further down instead.
 param(
     [string]$Theme,
-    [ValidateSet('theme', 'portable', 'both')]
     [string]$Mode,
     [switch]$List,
     [switch]$NoPreview
 )
 
 $ErrorActionPreference = 'Stop'
+
+$ValidModes = @('theme', 'portable', 'both')
 
 $RepoRaw  = 'https://raw.githubusercontent.com/teterw/codeblocks-dark/main'
 $CbConfig = Join-Path $env:APPDATA 'CodeBlocks\default.conf'
@@ -511,6 +516,10 @@ $hasCb = Test-Path $CbConfig
 if (-not $hasCb) {
     Write-Note "No Code::Blocks config found at $CbConfig"
     Write-Note 'Start Code::Blocks once so it writes one, or choose the portable build.'
+}
+
+if ($Mode -and $ValidModes -notcontains $Mode) {
+    throw "Unknown -Mode '$Mode'. Use one of: $($ValidModes -join ', ')."
 }
 
 if (-not $Mode) {

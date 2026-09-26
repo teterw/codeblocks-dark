@@ -1,0 +1,50 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the splice tests
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File test\Test-Install.ps1
+      - name: Check themes and previews are up to date
+        shell: bash
+        run: |
+          python tools/make-svg-previews.py
+          if ! git diff --quiet -- docs/previews; then
+            echo "docs/previews is stale - rerun tools/make-svg-previews.py and commit"
+            git --no-pager diff --stat -- docs/previews
+            exit 1
+          fi
+
+  package:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the zip
+        shell: bash
+        run: |
+          mkdir -p dist/codeblocks-dark
+          cp install.ps1 install.bat uninstall.ps1 uninstall.bat README.md LICENSE dist/codeblocks-dark/
+          cp -r themes dist/codeblocks-dark/
+          cd dist && 7z a -tzip ../codeblocks-dark.zip codeblocks-dark
+      - name: Attach it to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: codeblocks-dark.zip
+          body: |
+            Unzip and double-click `install.bat`, or run:
+
+            ```powershell
+            irm https://raw.githubusercontent.com/teterw/codeblocks-dark/main/install.ps1 | iex
+            ```

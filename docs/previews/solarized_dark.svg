@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="172"
+     viewBox="0 0 280 172" role="img" aria-label="Solarized Dark theme preview">
+  <title>Solarized Dark</title>
+  <rect width="280" height="172" rx="8" fill="#002b36"/>
+  <g font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="14">
+    <text x="14.0" y="30" fill="#cb4b16" xml:space="preserve">#include &lt;stdio.h&gt;</text>
+    <text x="14.0" y="70" fill="#2aa198" xml:space="preserve">// dark mode, finally</text>
+    <text x="14.0" y="90" fill="#859900" xml:space="preserve">int</text>
+    <text x="39.2" y="90" fill="#93a1a1" xml:space="preserve"> main</text>
+    <text x="81.2" y="90" fill="#b58900" xml:space="preserve">() {</text>
+    <text x="14.0" y="110" fill="#93a1a1" xml:space="preserve">    printf</text>
+    <text x="98.0" y="110" fill="#b58900" xml:space="preserve">(</text>
+    <text x="106.4" y="110" fill="#2aa198" xml:space="preserve">"hello"</text>
+    <text x="165.2" y="110" fill="#b58900" xml:space="preserve">);</text>
+    <text x="14.0" y="130" fill="#859900" xml:space="preserve">    return</text>
+    <text x="98.0" y="130" fill="#2aa1fc" xml:space="preserve"> 0</text>
+    <text x="114.8" y="130" fill="#b58900" xml:space="preserve">;</text>
+    <text x="14.0" y="150" fill="#b58900" xml:space="preserve">}</text>
+  </g>
+</svg>

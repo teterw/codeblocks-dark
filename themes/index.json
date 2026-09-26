@@ -1,0 +1,68 @@
+[
+  {
+    "slug": "dracula",
+    "name": "Dracula",
+    "background": "#282a36",
+    "foreground": "#f8f8f2"
+  },
+  {
+    "slug": "espresso_libre",
+    "name": "Espresso Libre",
+    "background": "#2a211c",
+    "foreground": "#847059"
+  },
+  {
+    "slug": "kft2",
+    "name": "KFT2",
+    "background": "#1c0024",
+    "foreground": "#5dff69"
+  },
+  {
+    "slug": "modnokai_coffee",
+    "name": "Modnokai Coffee",
+    "background": "#272822",
+    "foreground": "#ffffff"
+  },
+  {
+    "slug": "modnokai_night_shift",
+    "name": "Modnokai Night Shift",
+    "background": "#22282a",
+    "foreground": "#ffffff"
+  },
+  {
+    "slug": "modnokai_night_shift_v2",
+    "name": "Modnokai Night Shift v2",
+    "background": "#000000",
+    "foreground": "#ffffff"
+  },
+  {
+    "slug": "oblivion",
+    "name": "Oblivion",
+    "background": "#2e3436",
+    "foreground": "#eeeeec"
+  },
+  {
+    "slug": "solarized_dark",
+    "name": "Solarized Dark",
+    "background": "#002b36",
+    "foreground": "#93a1a1"
+  },
+  {
+    "slug": "son_of_obsidian",
+    "name": "Son of Obsidian",
+    "background": "#22282a",
+    "foreground": "#f1f2f3"
+  },
+  {
+    "slug": "sublime",
+    "name": "Sublime",
+    "background": "#282828",
+    "foreground": "#ffffff"
+  },
+  {
+    "slug": "vim",
+    "name": "Vim",
+    "background": "#000000",
+    "foreground": "#c0c0c0"
+  }
+]

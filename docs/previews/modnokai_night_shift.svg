@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="172"
+     viewBox="0 0 280 172" role="img" aria-label="Modnokai Night Shift theme preview">
+  <title>Modnokai Night Shift</title>
+  <rect width="280" height="172" rx="8" fill="#22282a"/>
+  <g font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace" font-size="14">
+    <text x="14.0" y="30" fill="#f92672" xml:space="preserve">#include &lt;stdio.h&gt;</text>
+    <text x="14.0" y="70" fill="#75715e" xml:space="preserve">// dark mode, finally</text>
+    <text x="14.0" y="90" fill="#26f9ad" xml:space="preserve">int</text>
+    <text x="39.2" y="90" fill="#ffffff" xml:space="preserve"> main</text>
+    <text x="81.2" y="90" fill="#a6e22e" xml:space="preserve">() {</text>
+    <text x="14.0" y="110" fill="#ffffff" xml:space="preserve">    printf</text>
+    <text x="98.0" y="110" fill="#a6e22e" xml:space="preserve">(</text>
+    <text x="106.4" y="110" fill="#e0a000" xml:space="preserve">"hello"</text>
+    <text x="165.2" y="110" fill="#a6e22e" xml:space="preserve">);</text>
+    <text x="14.0" y="130" fill="#26f9ad" xml:space="preserve">    return</text>
+    <text x="98.0" y="130" fill="#ff8080" xml:space="preserve"> 0</text>
+    <text x="114.8" y="130" fill="#a6e22e" xml:space="preserve">;</text>
+    <text x="14.0" y="150" fill="#a6e22e" xml:space="preserve">}</text>
+  </g>
+</svg>
